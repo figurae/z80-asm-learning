@@ -2,7 +2,7 @@
 
     org $8000
 
-    jr start            ; jump to start (extended immediate?, relative)
+    jr start            ; jump to start (relative)
 
 string:
     db "hello"
