@@ -36,50 +36,50 @@ BRIGHT          = %01000000
 FLASH           = %10000000
 
 start:
-    call black_screen
-    ei
+    call black_screen       ; clear screen
+    ei                      ; enable interrupts so that things can update
 
-    call load_rainbow
+    call load_rainbow       ; load first address of rainbow data into de
 begin_drawing:
+    halt                    ; slow things down a bit
     halt
     halt
     halt
-    halt
-    ld hl, COLOR_ATTR
-    ld b, 24
+    ld hl, COLOR_ATTR       ; load color attribute memory address into hl
+    ld b, 24                ; set counter to 24 (number of 8x8 cells vertically)
 .loop:
-    ld a, (de)
-    call draw_line
-    inc de
-    ld c, P_MAGENTA
-    cp c
-    call z, load_rainbow
-    djnz .loop
-    jr begin_drawing
+    ld a, (de)              ; load a rainbow color into a
+    call draw_line          ; draw a line using this color
+    inc de                  ; go to next color in rainbow
+    ld c, P_MAGENTA         ; load magenta into c
+    cp c                    ; check if current color is magenta (last color)
+    call z, load_rainbow    ; if all colors have been drawn, draw them again
+    djnz .loop              ; draw next line
+    jr begin_drawing        ; draw next screen
     ret
 
 load_rainbow:
-    ld de, rainbow
+    ld de, rainbow          ; load first address of rainbow data into de
     ret
 
 draw_line:
-    push bc
-    ld b, 32
+    push bc                 ; save b (vertical counter)
+    ld b, 32                ; set counter to 32 (number of 8x8 cells horizontally)
 .draw_cell:
-    ld (hl), a
-    inc hl
-    djnz .draw_cell
-    pop bc
+    ld (hl), a              ; set current cell to color attribute in a
+    inc hl                  ; move to next cell
+    djnz .draw_cell         ; continue until all cells in line are set
+    pop bc                  ; restore vertical counter
     ret
 
-rainbow:
+rainbow:                    ; sequence of rainbow colors
     db P_RED, P_RED | BRIGHT, P_YELLOW | BRIGHT, P_YELLOW, P_GREEN, P_GREEN | BRIGHT, P_BLUE | BRIGHT, P_BLUE, P_MAGENTA, P_MAGENTA | BRIGHT
 
 black_screen:
-    xor a               ; a = 0
-    ld (ATTR_P), a      ; make permanent current colors black
-    call CLEAR_SCREEN   ; clear top and bottom with permanent current colors
-    call BORDER         ; make border black
+    xor a                   ; a = 0
+    ld (ATTR_P), a          ; make permanent current colors black
+    call CLEAR_SCREEN       ; clear top and bottom with permanent current colors
+    call BORDER             ; make border black
     ret
 
 ; deployment
