@@ -11,6 +11,7 @@ ATTR_M          = $5800         ; start of color attribute memory
 START_IDX       = $F000         ; ring buffer memory start index
 END_IDX         = $F001         ; ring buffer memory end index
 BUFFER          = $F002         ; start of ring buffer memory
+BUFFER_FLAG     = $F018
 BUFFER_SIZE     = $F            ; ring buffer memory size
 
 ; constants
@@ -21,23 +22,19 @@ start:
     ei                          ; enable interrupts to enable screen updates
     ld a, 2                     ; select upper screen
     call OPEN_CHANNEL           ; open channel to upper screen
-    ld de, SCREEN               ; load first screen memory address into de
     xor a
-    ld (START_IDX), a
-    ld (END_IDX), a
 
 main_loop:
+    call read_from_buffer
+    call nz, print_char
+
     call read_key               ; poll keyboard
     cp 0                        ; compare result to zero
-    call nz, key_was_read       ; handle if result is not zero
+    call nz, write_to_buffer    ; place result in buffer
     jr main_loop                ; loop forever
     ; ret
 
-key_was_read:                   ; TODO: refactor, ignore repeating keys, repeat keys after a while
-    call write_to_buffer
-    call read_from_buffer
-    call print_char
-    ret
+;; TODO: refactor, ignore repeating keys, repeat keys after a while
 
 read_key:                       ; destroys b, c, d, e, h, l, returns a
     ld hl, key_map              ; keyboard map address
@@ -65,34 +62,58 @@ read_key:                       ; destroys b, c, d, e, h, l, returns a
 
 print_char:
     rst $10                     ; print char in a to screen
-    inc de                      ; go to next screen address
-    halt                        ; wait for frame
+    halt                        ; wait for frame, TODO: remove later
     ret
 
-write_to_buffer:                ; destroys a, b, d, e, h, l
-   ld b, a                      ; save char from a in b
-   ld a, (END_IDX)              ; load index into a
-   ld de, BUFFER                ; load zeroth buffer address
-   ld l, a
-   ld h, 0                      ; make index 16-bit
-   add hl, de                   ; add index as offset to buffer address
-   ; ld e, a                    ; TODO: y dis kawaii hack no work? UwU (switch address low byte with offset)
-   inc a                        ; increment index
-   cp BUFFER_SIZE               ; test for index overflow
-   jr c, .no_overflow           ; no overflow found
-   xor a                        ; reset index
+write_to_buffer:                ; destroys a, b, c, d, e, h, l
+    ld b, a                     ; save char from a in b
+
+    ld a, (END_IDX)             ; load index into a
+    ld de, BUFFER               ; load zeroth buffer address
+    ld hl, de                   ; duplicate it in hl for first run purposes (TODO: refactor)
+
+    cp 0                        ; is index 0?
+    jr z, .first_run            ; why, yes. yes, it is!
+
+    ld l, a
+    ld h, 0                     ; make index 16-bit
+    add hl, de                  ; add index as offset to buffer address
+    ; ld e, a                   ; TODO: y dis kawaii hack no work? UwU (switch address low byte with offset)
+
+    dec hl                      ; go back to previous character
+    ld c, (hl)                  ; load previous character into c
+    ex af, af'                  ; give me secondary a
+    ld a, b                     ; load new char to secondary a
+    cp c                        ; compare new and previous char
+    ret z                       ; abort if they're the same
+    
+    ex af, af'                  ; bring back primary a
+    inc hl                      ; return to current char location
+.first_run:
+    inc a                       ; increment index
+    cp BUFFER_SIZE              ; test for index overflow
+    jr c, .no_overflow          ; no overflow found
+    xor a                       ; reset index
 .no_overflow:
-   ld (END_IDX), a              ; save new index
-   ld a, b                      ; restore char in a
-   ld (hl), a                   ; write char to buffer
-   ret
+    ld (END_IDX), a             ; save new index
+    ld a, b                     ; restore char in a
+    ld (hl), a                  ; write char to buffer
+    ld hl, BUFFER_FLAG
+    ld (hl), 1                  ; set buffer flag
+    ret
 
 read_from_buffer:               ; destroys d, e, h, l, returns a
+    ld d, (BUFFER_FLAG)         ; load buffer edit flag
+    xor a                       ; reset a
+    cp d                        ; check buffer edit flag
+    ret z                       ; abort if buffer flag is not set
+
     ld a, (START_IDX)           ; load index into a
     ld de, BUFFER               ; load zeroth buffer address
     ld l, a
     ld h, 0                     ; make index 16-bit
     add hl, de                  ; add index as offset to buffer address
+    
     inc a                       ; increment index
     cp BUFFER_SIZE              ; test for index overflow
     jr c, .no_overflow          ; no overflow found
@@ -100,6 +121,9 @@ read_from_buffer:               ; destroys d, e, h, l, returns a
 .no_overflow:
     ld (START_IDX), a           ; save new index
     ld a, (hl)                  ; load from buffer to a
+    ld (hl), 0
+    ld hl, BUFFER_FLAG
+    ld (hl), 0                  ; reset buffer flag
     ret
 
 key_map:
