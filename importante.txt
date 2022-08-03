@@ -1,0 +1,10 @@
+; routines
+$1601   open channel
+
+; addresses
+$4000   start of screen memory
+$5800   start of color attribute memory
+$5C08   keycode of last pressed key
+
+; ports
+$00FE   is any key pressed (11111 if no); or is this port 0xFE?
