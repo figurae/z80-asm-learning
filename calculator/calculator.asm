@@ -14,13 +14,13 @@ BUFFER          = $F002         ; start of ring buffer memory
 BUFFER_FLAG     = $F018         ; address of buffer flag
 KEY_PRESSED     = $F019         ; key pressed flag
 COUNTDOWN       = $F020         ; key repeat countdown value
-LAST_KEY        = $F021         ; last key code
+LAST_KEY        = $F022         ; last key code
 
 ; constants
 KEY_PORTS       = 8             ; number of keyboard ports
 KEYS_IN_PORT    = 5             ; number of keys per port (row)
 BUFFER_SIZE     = $F            ; ring buffer memory size
-COUNTDOWN_CAP   = $FF           ; key repeat countdown starts from this number
+COUNTDOWN_CAP   = $0500         ; key repeat countdown starts from this number
 
 start:
     ei                          ; enable interrupts to enable screen updates
@@ -28,42 +28,54 @@ start:
     call OPEN_CHANNEL           ; open channel to upper screen
 
 main_loop:
-    ; call read_from_buffer
-    call is_key_pressed
-    call z, handle_no_key
-    call nz, handle_key
+                                ; TODO: add key buffer support
+    call is_key_pressed         ; check if any key is pressed
+    call z, handle_no_key       ; if no key is pressed, do housekeeping
+    call nz, handle_key         ; if a key is pressed, handle it
 
-    ;call nz, write_to_buffer    ; place result in buffer
     jr main_loop                ; loop forever
-    ; ret
 
-;; TODO: refactor, ignore repeating keys, repeat keys after a while
-
-handle_no_key:
-    ld a, COUNTDOWN_CAP
-    ld (COUNTDOWN), a
+handle_no_key:                  ; resets a, flags, LAST_KEY
     xor a
-    ld (LAST_KEY), a
+    ld (LAST_KEY), a 
     ret
 
 handle_key:
-    call read_key
-    call cmp_previous_key
-    call z, print_char
+    call read_key               ; read specific key and place it in a
+    call cmp_previous_key       ; compare it to LAST_KEY and handle key repeat
+                                ; TODO: maybe make handling key repeat a separate procedure?
+                                ; TODO: make key repeat wait time consistent across ports (refactor)
+    call z, print_char          ; print the character on screen
     ret
 
-cmp_previous_key:               ; destroys b, returns zero if key is different
-    ld b, a
-    ld a, (LAST_KEY)
-    cp 0
-    jr z, .handle_new
-    ld a, b
-    ; cp (LAST_KEY) 
+cmp_previous_key:               ; destroys b, de, hl, sets zero on success
+    ld b, a                     ; save current key
+    ld a, (LAST_KEY)            ; get keycode of the previous key
+    cp 0                        ; was there no previous key?
+    call z, .start_countdown    ; if current key is the first key, start countdown
+    jr z, .return_key           ; and return this key
+    cp b                        ; is it a different key?
+    call nz, .start_countdown   ; if it's a different key, restart countdown
+    jr nz, .return_key          ; and return this key
+    ld de, (COUNTDOWN)          ; otherwise check if countdown ended
+    ld hl, 0
+    sbc hl, de                  ; has it ended?
+    jr z, .return_key           ; if yes, repeat key
+    dec de                      ; otherwise decrease countdown
+    ld (COUNTDOWN), de          ; and save it
     ret
-.handle_new:
-    ld a, COUNTDOWN_CAP
-    ld a, b
-    ld (LAST_KEY), a
+.return_key:
+    ld a, b                     ; restore current key
+    ld (LAST_KEY), a            ; save current key as LAST_KEY
+    cp a                        ; set zero flag; TODO: figure out why this misbehaves
+                                ; this is used to make sure zero is set so that
+                                ; print_char runs, but sometimes a doesn't contain
+                                ; keycode but is 0 when this is present, which requires
+                                ; hacky handling in print_char
+    ret
+.start_countdown:
+    ld de, COUNTDOWN_CAP        ; get max countdown value
+    ld (COUNTDOWN), de          ; write it in COUNTDOWN
     ret
 
 read_key:                       ; destroys b, c, d, e, h, l, returns a
@@ -91,17 +103,22 @@ read_key:                       ; destroys b, c, d, e, h, l, returns a
     ret
 
 print_char:
+    cp 0
+    ret z                       ; return if no keycode in a; TODO: make less hacky
+                                ; this shouldn't be necessary, a shoud never
+                                ; contain 0 when print_char is called
     rst $10                     ; print char in a to screen
     halt                        ; wait for frame, TODO: remove later
     ret
 
-is_key_pressed:                 ; sets zero if no key is pressed
+is_key_pressed:                 ; sets zero flag if no key is pressed
     xor a                       ; set port low byte to 0
     in a, ($fe)                 ; set port high byte to fe (is this just port fe if low byte is 0?)
     and $1f                     ; mask %00011111
     cp $1f                      ; is any key pressed?
     ret
 
+                                ; FIXME: make buffer work again
 write_to_buffer:                ; destroys a, b, c, d, e, h, l
     ld b, a                     ; save char from a in b
 
