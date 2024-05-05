@@ -1,0 +1,39 @@
+# file opened: main.asm
+ 1    0000                      device  zxspectrum48
+ 2    0000
+ 3    0000                      org     $8000
+ 4    8000
+ 5    8000              seed:   equ     $ff00                   ; address of the seed
+ 6    8000              screen: equ     $4000                   ; screen memory start address
+ 7    8000
+ 8    8000              start:
+ 9    8000 06 00                ld      b,0                     ; initialize inner loop (256 bits)
+10    8002 16 1B                ld      d,27                    ; initialize outer loop (24 bytes + 3 bytes)
+11    8004 3E FF                ld      a,$ff                   ; load initial bitmap value
+12    8006 21 00 40             ld      hl,screen               ; load screen memory start address
+13    8009              .loop:
+14    8009 77                   ld      (hl),a                  ; write bitmap value in a to screen address
+15    800A E5                   push    hl
+16    800B D5                   push    de
+17    800C CD 19 80             call    get_random_number       ; load a not-so-random value in a
+18    800F D1                   pop     de
+19    8010 E1                   pop     hl
+20    8011 23                   inc     hl                      ; go to next screen address
+21    8012 10 F5                djnz    .loop                   ; complete inner loop
+22    8014 15                   dec     d                       ; decrease outer loop counter
+23    8015 C2 09 80             jp      nz,.loop                ; and complete outer loop
+24    8018 C9                   ret
+25    8019
+26    8019              get_random_number:                      ; returns a, destroys hl, de
+27    8019 2A 00 FF             ld      hl,(seed)               ; load seed as address in hl
+28    801C 5E                   ld      e,(hl)                  ; get whatever is at the address
+29    801D ED 5F                ld      a,r                     ; load current refresh register value
+30    801F 57                   ld      d,a                     ; load it into d (magic-number d works too)
+31    8020 19                   add     hl,de                   ; add de to current seed
+32    8021 AC                   xor     h                       ; xor h to get a pseudorandom byte into a
+33    8022 22 00 FF             ld      (seed),hl               ; save the new seed
+34    8025 C9                   ret
+35    8026
+36    8026                      savesna "main.sna",start
+37    8026
+# file closed: main.asm
