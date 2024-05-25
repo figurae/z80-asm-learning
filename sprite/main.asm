@@ -4,15 +4,15 @@
         org     $8000
 
 start:
-        ld      b,$8
-        ld      c,$8
+        ld      b,$15
+        ld      c,$3f
         call    get_pixel_address
         ld      b,$8
         ld      de,SPRITE
 .loop:
         ld      a,(de)
         ld      (hl),a
-        inc     h
+        call    go_to_next_line
         inc     de
         djnz    .loop
         ret
@@ -42,6 +42,20 @@ get_pixel_address:
         and     %00011111               ; mask out non-x bits
         or      l                       ; combine with y5, y4, y3
         ld      l,a                     ; store in l
+        ret
+        
+go_to_next_line:
+        inc     h                       ; increment y2, y1, y0
+        ld      a,h
+        and     %00000111               ; did we overflow into y6?
+        ret     nz                      ; return if not
+        ld      a,l                     ; if yes, go to next character line
+        add     a,%00100000             ; increment y3
+        ld      l,a
+        ret     c                       ; did we overflow l (y5, y4, y3)?
+        ld      a,h                     ; if not, undo overflow into y6
+        sub     %00001000               ; as to not jump to next 3rd of screen
+        ld      h,a
         ret
 
 SPRITE:
