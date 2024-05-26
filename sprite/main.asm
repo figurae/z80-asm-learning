@@ -3,30 +3,43 @@
 
         org     $8000
 
+rotation equ $ff00
+
 start:
-        ld      b,128
+        ld      b,0
         ld      c,0
         ei
 .loop:
+        ld      a,b
+        and     %00000111               ; get x rotation count
+        ld      (rotation),a            ; and store it in memory
         call    get_pixel_address
         push    bc
         call    draw_sprite
         pop     bc
         halt
         call    get_pixel_address
-        ld      (hl),0
+        push    bc
+        call    clear_sprite
+        pop     bc
+        inc     b
         inc     c
+        call    reset_b_if_over_256
         call    reset_c_if_over_192
         jp      .loop
+        ret
+
+reset_b_if_over_256:
+        ld      a,b
+        sub     256-8
+        ret     c
+        ld      b,0
         ret
 
 reset_c_if_over_192:
         ld      a,c
         sub     192-8
         ret     c
-        push    bc
-        call    clear_sprite
-        pop     bc
         ld      c,0
         ret
 
@@ -34,17 +47,55 @@ draw_sprite:
         ld      b,$8
         ld      de,SPRITE
 .loop:
+        ld      a,(rotation)
+        ld      c,a
         ld      a,(de)
+        call    rotate_by_c
         ld      (hl),a
+        inc     l
+        ld      a,(rotation)
+        ld      c,a
+        ld      a,(de)
+        call    reverse_rotate_by_c
+        ld      (hl),a
+        dec     l
         call    go_to_next_line
         inc     de
         djnz    .loop
         ret
 
+rotate_by_c:
+        inc     c
+        dec     c
+        ret     z
+.loop:
+        srl     a
+        dec     c
+        jp      nz,.loop
+        ret
+
+reverse_rotate_by_c:
+        push    af
+        ld      a,c
+        sub     8
+        neg
+        ld      c,a
+        pop     af
+        ret     z
+.loop:
+        sla     a
+        dec     c
+        jp      nz,.loop
+        ret
+        
+
 clear_sprite:
         ld      b,$8
 .loop:
         ld      (hl),0
+        inc     l
+        ld      (hl),0
+        dec     l
         call    go_to_next_line
         djnz    .loop
         ret
