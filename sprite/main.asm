@@ -4,9 +4,33 @@
         org     $8000
 
 start:
-        ld      b,$15
-        ld      c,$3f
+        ld      b,128
+        ld      c,0
+        ei
+.loop:
         call    get_pixel_address
+        push    bc
+        call    draw_sprite
+        pop     bc
+        halt
+        call    get_pixel_address
+        ld      (hl),0
+        inc     c
+        call    reset_c_if_over_192
+        jp      .loop
+        ret
+
+reset_c_if_over_192:
+        ld      a,c
+        sub     192-8
+        ret     c
+        push    bc
+        call    clear_sprite
+        pop     bc
+        ld      c,0
+        ret
+
+draw_sprite:
         ld      b,$8
         ld      de,SPRITE
 .loop:
@@ -14,6 +38,14 @@ start:
         ld      (hl),a
         call    go_to_next_line
         inc     de
+        djnz    .loop
+        ret
+
+clear_sprite:
+        ld      b,$8
+.loop:
+        ld      (hl),0
+        call    go_to_next_line
         djnz    .loop
         ret
 
@@ -36,7 +68,7 @@ get_pixel_address:
         and     %11100000               ; mask out other bits
         ld      l,a                     ; store in l
         ld      a,b                     ; load x coordinate
-        rra                             ; rotate to get x5, x4, x3, x2, x1
+        rra                             ; divide by 8 to get x4, x3, x2, x1, x0
         rra
         rra
         and     %00011111               ; mask out non-x bits
@@ -54,8 +86,13 @@ go_to_next_line:
         ld      l,a
         ret     c                       ; did we overflow l (y5, y4, y3)?
         ld      a,h                     ; if not, undo overflow into y6
-        sub     %00001000               ; as to not jump to next 3rd of screen
+        sub     %00001000               ; to not jump to next 3rd of screen
         ld      h,a
+        ret
+        
+go_to_previous_line:
+        dec     h
+        ld      a,h
         ret
 
 SPRITE:
