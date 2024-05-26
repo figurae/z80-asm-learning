@@ -3,16 +3,16 @@
 
                 org     $8000
 
-ROTATION        equ     $ff00
+SHIFT           equ     $ff00                   ; current sprite bitshift counter address
 
 start:
                 ld      b,0                     ; initialize x (in pixels)
                 ld      c,0                     ; initialize y (in pixels)
                 ei
 .loop:
-                ld      a,b
-                and     %00000111               ; how far x is in pixels from cell start
-                ld      (ROTATION),a            ; is the number of needed bitshifts
+                ld      a,b                     ; check three least significant bits of x coord
+                and     %00000111               ; to get distance in pixels from cell start
+                ld      (SHIFT),a               ; which is the number of needed bitshifts
                 call    get_pixel_address       ; get video memory address in hl
                 push    bc
                 call    draw_sprite             ; draw sprite (this moves 8 pixels down)
@@ -46,22 +46,22 @@ reset_c_if_over_192:                            ; set c to 0 if c > 192 - 8, des
 ; draw 8x8 sprite at x, y pixel coordinates
 ;
 ; input: hl = video memory address, SPRITE = 8x8 sprite data address,
-; ROTATION = sprite bitshift count in pixels, destroys a, bc, de,
+; SHIFT = sprite bitshift count in pixels, destroys a, bc, de,
 ; moves hl 8 pixels down
 draw_sprite:
                 ld      b,$8                    ; set counter to sprite size in pixels
                 ld      de,SPRITE               ; load sprite data address into de
 .loop:
-                ld      a,(ROTATION)            ; get sprite bitshift count
+                ld      a,(SHIFT)               ; get sprite bitshift count
                 ld      c,a                     ; and save it in c
                 ld      a,(de)                  ; get current sprite line
-                call    rotate_by_c             ; shift it right by the correct amount
+                call    shift_by_c              ; shift it right by the correct amount
                 ld      (hl),a                  ; write shifted line to video memory
                 inc     l                       ; go right to next character cell
-                ld      a,(ROTATION)            ; get bitshift count again
+                ld      a,(SHIFT)               ; get bitshift count again
                 ld      c,a
                 ld      a,(de)                  ; get current sprite line again
-                call    reverse_rotate_by_c     ; shift it left by 8 - ROTATION
+                call    reverse_shift_by_c      ; shift it left by 8 - SHIFT
                 ld      (hl),a                  ; write it to the second cell
                 dec     l                       ; return to the previous cell
                 call    go_to_next_line         ; move to next y value
@@ -69,28 +69,28 @@ draw_sprite:
                 djnz    .loop                   ; repeat until b == 0
                 ret
 
-rotate_by_c:                                    ; shift a right by c, destroys c
+shift_by_c:                                     ; shift a right by c, destroys c
                 inc     c                       ; check if we start with zero
                 dec     c                       ; NOTE: maybe there's a faster way?
                 ret     z                       ; zero means no need for shifting
 .loop:
                 srl     a                       ; shift right and zero leftmost bit
                 dec     c                       ; decrease bitshift count
-                jp      nz,.loop                ; repeat until ROTATION == 0
+                jp      nz,.loop                ; repeat until SHIFT == 0
                 ret
 
-reverse_rotate_by_c:                            ; shift a left by 8 - c, destroys c
+reverse_shift_by_c:                             ; shift a left by 8 - c, destroys c
                 push    af
                 ld      a,c
-                sub     8                       ; calculate ROTATION - 8
-                neg                             ; negate to get 8 - ROTATION
+                sub     8                       ; calculate SHIFT - 8
+                neg                             ; negate to get 8 - SHIFT
                 ld      c,a
                 pop     af
                 ret     z                       ; nothing to be done if 8 - 8
 .loop:
                 sla     a                       ; shift left and zero rightmost bit
                 dec     c                       ; decrease bitshift count
-                jp      nz,.loop                ; repeat until 8 - ROTATION == 0
+                jp      nz,.loop                ; repeat until 8 - SHIFT == 0
                 ret
 
 ; clear 8x8 sprite at x, y pixel coordinates
@@ -153,7 +153,7 @@ go_to_next_line:
                 ld      h,a
                 ret
 
-SPRITE          db      %00111100
+SPRITE          db      %00111100               ; 8x8 sprite data
                 db      %01000010
                 db      %10000001
                 db      %10100101
