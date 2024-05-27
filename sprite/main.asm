@@ -16,44 +16,71 @@ start:
                 ld      (Y_DIR),a
                 ei
 .loop:
+                call    reverse_x               ; reverse X_DIR if out of bounds (+)
+                call    reverse_y               ; reverse Y_DIR if out of bounds (+)
+                ld      a,b
+                cp      0
+                call    z,set_x_dir_to_1        ; x == 0 => X_DIR = 1
+                ld      a,c
+                cp      0
+                call    z,set_y_dir_to_1        ; y == 0 => Y_DIR = 1
+
+                ld      a,(X_DIR)
+                add     b                       ; add -1 or 1 to x depending on X_DIR
+                ld      b,a
+                ld      a,(Y_DIR)
+                add     c                       ; add -1 or 1 to y depending on Y_DIR
+                ld      c,a
+
                 ld      a,b                     ; check three least significant bits of x coord
                 and     %00000111               ; to get distance in pixels from cell start
                 ld      (SHIFT),a               ; which is the number of needed bitshifts
+
                 call    get_pixel_address       ; get video memory address in hl
                 push    bc
                 call    draw_sprite             ; draw sprite (this moves 8 pixels down)
                 pop     bc
+
                 halt
+
                 call    get_pixel_address       ; rewind hl to the original position
                 push    bc
                 call    clear_sprite            ; clear the sprite we've drawn
                 pop     bc
-                ld      a,(X_DIR)
-                add     b
-                ld      b,a
-                ld      a,(Y_DIR)
-                add     c
-                ld      c,a
-                call    reverse_x_dir           ; reverse sprite x direction
-                call    reverse_y_dir           ; reverse sprite y direction
+
                 jp      .loop
+
                 ret
 
-reverse_x_dir:                                  ; reverse X_DIR, destroys a
+; reverse X_DIR if out of screen bounds (positive), destroys a
+reverse_x:
                 ld      a,b
-                sub     256-9                   ; subtract screen width less sprite size
+                sub     256-8-1                 ; x > screen width less sprite size
                 ret     c                       ; ignore if sprite within bounds
                 ld      a,(X_DIR)
-                neg
+                neg                             ; negate X_DIR
+                ld      (X_DIR),a
+
+                ret
+
+; reverse Y_DIR if out of screen bounds (positive), destroys a
+reverse_y:
+                ld      a,c
+                sub     192-9                   ; y > screen height less sprite size
+                ret     c                       ; ignore if sprite within bounds
+                ld      a,(Y_DIR)
+                neg                             ; negate Y_DIR
+                ld      (Y_DIR),a
+
+                ret
+
+set_x_dir_to_1:
+                ld      a,1
                 ld      (X_DIR),a
                 ret
 
-reverse_y_dir:                            ; reverse Y_DIR, destroys a
-                ld      a,c
-                sub     192-9                   ; subtract screen height less sprite size
-                ret     c                       ; ignore if sprite within bounds
-                ld      a,(Y_DIR)
-                neg
+set_y_dir_to_1:
+                ld      a,1
                 ld      (Y_DIR),a
                 ret
 
@@ -83,7 +110,8 @@ draw_sprite:
                 djnz    .loop                   ; repeat until b == 0
                 ret
 
-shift_by_c:                                     ; shift a right by c, destroys c
+; shift a right c times, destroys c
+shift_by_c:
                 inc     c                       ; check if we start with zero
                 dec     c                       ; NOTE: maybe there's a faster way?
                 ret     z                       ; zero means no need for shifting
@@ -93,7 +121,8 @@ shift_by_c:                                     ; shift a right by c, destroys c
                 jp      nz,.loop                ; repeat until SHIFT == 0
                 ret
 
-reverse_shift_by_c:                             ; shift a left by 8 - c, destroys c
+; shift a left (8 - c) times, destroys c
+reverse_shift_by_c:
                 push    af
                 ld      a,c
                 sub     8                       ; calculate SHIFT - 8
