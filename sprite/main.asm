@@ -3,11 +3,17 @@
 
                 org     $8000
 
-SHIFT           equ     $ff00                   ; current sprite bitshift counter address
+; addresses
+SHIFT           equ     $ff00                   ; current sprite bitshift counter
+X_DIR           equ     $ff01                   ; current x movement direction (-1 | 1)
+Y_DIR           equ     $ff02                   ; current y movement direction (-1 | 1)
 
 start:
                 ld      b,0                     ; initialize x (in pixels)
                 ld      c,0                     ; initialize y (in pixels)
+                ld      a,1                     ; initialize x and y movement directions
+                ld      (X_DIR),a
+                ld      (Y_DIR),a
                 ei
 .loop:
                 ld      a,b                     ; check three least significant bits of x coord
@@ -22,25 +28,33 @@ start:
                 push    bc
                 call    clear_sprite            ; clear the sprite we've drawn
                 pop     bc
-                inc     b                       ; increment x
-                inc     c                       ; increment y
-                call    reset_b_if_over_256     ; reset sprite x position
-                call    reset_c_if_over_192     ; reset sprite y position
+                ld      a,(X_DIR)
+                add     b
+                ld      b,a
+                ld      a,(Y_DIR)
+                add     c
+                ld      c,a
+                call    reverse_x_dir           ; reverse sprite x direction
+                call    reverse_y_dir           ; reverse sprite y direction
                 jp      .loop
                 ret
 
-reset_b_if_over_256:                            ; set b to 0 if b > 256 - 8, destroys a
+reverse_x_dir:                                  ; reverse X_DIR, destroys a
                 ld      a,b
-                sub     256-8                   ; subtract screen width less sprite size
+                sub     256-9                   ; subtract screen width less sprite size
                 ret     c                       ; ignore if sprite within bounds
-                ld      b,0                     ; if not, reset x to 0
+                ld      a,(X_DIR)
+                neg
+                ld      (X_DIR),a
                 ret
 
-reset_c_if_over_192:                            ; set c to 0 if c > 192 - 8, destroys a
+reverse_y_dir:                            ; reverse Y_DIR, destroys a
                 ld      a,c
-                sub     192-8                   ; subtract screen height less sprite size
+                sub     192-9                   ; subtract screen height less sprite size
                 ret     c                       ; ignore if sprite within bounds
-                ld      c,0                     ; if not, reset y to 0
+                ld      a,(Y_DIR)
+                neg
+                ld      (Y_DIR),a
                 ret
 
 ; draw 8x8 sprite at x, y pixel coordinates
